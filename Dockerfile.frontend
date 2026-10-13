@@ -1,0 +1,48 @@
+# Testwright Frontend Dockerfile
+# Builds React frontend with Vite and serves with nginx
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache curl
+
+# Accept build arguments
+ARG VITE_BACKEND_URL=http://localhost:8002
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+
+# Copy package files first for better caching
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production=false
+
+# Copy configuration files
+COPY frontend/vite.config.js ./
+COPY frontend/tailwind.config.js ./
+COPY frontend/postcss.config.js ./
+COPY frontend/eslint.config.js ./
+
+# Copy source code
+COPY frontend/public/ ./public/
+COPY frontend/src/ ./src/
+COPY frontend/index.html ./
+
+# Create a non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Change ownership of the app directory
+RUN chown -R nextjs:nodejs /app
+USER nextjs
+
+# Expose port 3005 (QA Copilot custom port)
+EXPOSE 3002
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3002 || exit 1
+
+# Start the development server
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3002"]

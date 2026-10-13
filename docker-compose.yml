@@ -1,0 +1,78 @@
+# Testwright Docker Compose Configuration
+# Orchestrates backend (FastAPI) and frontend (React) services
+# ============================================================================
+# TESTWRIGHT DOCKER COMPOSE CONFIGURATION
+# ============================================================================
+# This orchestrates the complete Testwright application stack:
+# - Backend: FastAPI server with Python dependencies
+# - Frontend: React application with Vite dev server
+# - Environment: Development configuration with hot reloading
+# - Networking: Internal communication between services
+# ============================================================================
+
+services:
+  # ============================================================================
+  # BACKEND SERVICE - FASTAPI + PYTHON
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: testwright-backend-dev
+    ports:
+      - "8002:8002"  # Testwright backend port
+    environment:
+      - WEAVIATE_API_KEY=${WEAVIATE_API_KEY}
+      - WEAVIATE_URL=${WEAVIATE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_CHAT_MODEL=${OPENAI_CHAT_MODEL:-gpt-4o}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
+    volumes:
+      - ./api:/app/api
+      - ./.env:/app/.env
+      - backend_uploads:/app/uploads  # Persistent volume for file uploads
+    restart: unless-stopped
+    networks:
+      - testwright-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:8002}
+    container_name: testwright-frontend-dev
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules  # Prevent node_modules from being overwritten
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - testwright-network
+    environment:
+      - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:8002}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 45s
+
+networks:
+  testwright-network:
+    driver: bridge
+
+volumes:
+  backend_uploads:
+    driver: local
